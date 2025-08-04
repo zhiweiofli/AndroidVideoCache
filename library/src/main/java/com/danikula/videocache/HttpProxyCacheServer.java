@@ -164,6 +164,30 @@ public class HttpProxyCacheServer {
         return getCacheFile(url).exists();
     }
 
+    /**
+     * Starts preloading video for specified url.
+     * This method initiates background caching process without waiting for client requests.
+     * When {@link #getProxyUrl(String)} is called later for the same url, it will inherit the preloaded progress.
+     *
+     * @param url a url to file that should be preloaded.
+     */
+    public void preload(String url) {
+        checkNotNull(url, "Url can't be null!");
+        if (isCached(url)) {
+            LOG.debug("File for url " + url + " is already cached, skipping preload");
+            return;
+        }
+        
+        synchronized (clientsLock) {
+            try {
+                HttpProxyCacheServerClients clients = getClients(url);
+                clients.startPreload();
+            } catch (ProxyCacheException e) {
+                LOG.warn("Error starting preload for url: " + url, e);
+            }
+        }
+    }
+
     public void shutdown() {
         LOG.info("Shutdown proxy server");
 

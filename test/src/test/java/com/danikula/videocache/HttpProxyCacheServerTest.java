@@ -407,4 +407,42 @@ public class HttpProxyCacheServerTest extends BaseTest {
     private void waitForAsyncTrimming() throws InterruptedException {
         Thread.sleep(500);
     }
+
+    @Test
+    public void testPreload() throws Exception {
+        HttpProxyCacheServer proxy = newProxy(cacheFolder);
+        
+        // File should not be cached initially
+        assertThat(proxy.isCached(HTTP_DATA_URL)).isFalse();
+        
+        // Start preloading
+        proxy.preload(HTTP_DATA_URL);
+        
+        // Wait a bit for preload to start
+        Thread.sleep(1000);
+        
+        // Now get the proxy URL - it should reuse the preloaded cache
+        String proxyUrl = proxy.getProxyUrl(HTTP_DATA_URL);
+        assertThat(proxyUrl).isNotNull();
+        assertThat(proxyUrl).contains("127.0.0.1");
+        
+        proxy.shutdown();
+    }
+
+    @Test
+    public void testPreloadForAlreadyCachedFile() throws Exception {
+        HttpProxyCacheServer proxy = newProxy(cacheFolder);
+        
+        // First, fully cache the file
+        readProxyResponse(proxy, HTTP_DATA_URL, 0);
+        assertThat(proxy.isCached(HTTP_DATA_URL)).isTrue();
+        
+        // Preload should be a no-op for already cached files
+        proxy.preload(HTTP_DATA_URL);
+        
+        // File should still be cached
+        assertThat(proxy.isCached(HTTP_DATA_URL)).isTrue();
+        
+        proxy.shutdown();
+    }
 }
