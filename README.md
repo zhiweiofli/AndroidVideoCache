@@ -28,7 +28,8 @@ Because there is no sense to download video a lot of times while streaming!
 - offline work with cached resources;
 - partial loading;
 - cache limits (max cache size, max files count);
-- multiple clients for same url.
+- multiple clients for same url;
+- preloading support for background caching.
 
 Note `AndroidVideoCache` works only with **direct urls** to media file, it  [**doesn't support**](https://github.com/danikula/AndroidVideoCache/issues/19) any streaming technology like DASH, SmoothStreaming, HLS.  
 
@@ -117,6 +118,32 @@ Use `HttpProxyCacheServer.registerCacheListener(CacheListener listener)` method 
 Use `HttpProxyCacheServer.isCached(String url)` method to check was url's content fully cached to file or not.
 
 See `sample` app for more details.
+
+### Preloading videos
+You can start preloading videos in background before they are actually needed for playback. This is useful for improving user experience by reducing initial buffering time.
+
+```java
+HttpProxyCacheServer proxy = getProxy();
+
+// Start preloading video in background
+proxy.preload("http://example.com/video.mp4");
+
+// Later, when user wants to play the video, 
+// getProxyUrl will reuse the preloaded cache
+String proxyUrl = proxy.getProxyUrl("http://example.com/video.mp4");
+videoView.setVideoPath(proxyUrl);
+```
+
+The `preload()` method:
+- Starts downloading and caching the video file in background
+- Does nothing if the file is already fully cached
+- Is safe to call multiple times for the same URL
+- Works seamlessly with `getProxyUrl()` - any preloaded data will be reused
+
+This is especially useful for:
+- Preloading the next video in a playlist while current video is playing
+- Preloading popular content during app startup
+- Improving perceived performance in video galleries
 
 ### Providing names for cached files
 By default `AndroidVideoCache` uses MD5 of video url as file name. But in some cases url is not stable and it can contain some generated parts (e.g. session token). In this case caching mechanism will be broken. To fix it you have to provide own `FileNameGenerator`:

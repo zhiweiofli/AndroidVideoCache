@@ -6,6 +6,9 @@ import android.os.Message;
 
 import com.danikula.videocache.file.FileCache;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.File;
 import java.io.IOException;
 import java.net.Socket;
@@ -21,6 +24,8 @@ import static com.danikula.videocache.Preconditions.checkNotNull;
  * @author Alexey Danilov (danikula@gmail.com).
  */
 final class HttpProxyCacheServerClients {
+
+    private static final Logger LOG = LoggerFactory.getLogger("HttpProxyCacheServerClients");
 
     private final AtomicInteger clientsCount = new AtomicInteger(0);
     private final String url;
@@ -78,6 +83,16 @@ final class HttpProxyCacheServerClients {
         return clientsCount.get();
     }
 
+    public void startPreload() throws ProxyCacheException {
+        synchronized (this) {
+            if (proxyCache == null) {
+                proxyCache = newHttpProxyCache();
+                // Start preloading in background thread
+                new Thread(new PreloadRunnable(), "Preload for " + url).start();
+            }
+        }
+    }
+
     private HttpProxyCache newHttpProxyCache() throws ProxyCacheException {
         HttpUrlSource source = new HttpUrlSource(url, config.sourceInfoStorage, config.headerInjector);
         FileCache cache = new FileCache(config.generateCacheFile(url), config.diskUsage);
@@ -109,6 +124,41 @@ final class HttpProxyCacheServerClients {
         public void handleMessage(Message msg) {
             for (CacheListener cacheListener : listeners) {
                 cacheListener.onCacheAvailable((File) msg.obj, url, msg.arg1);
+            }
+        }
+    }
+
+    private final class PreloadRunnable implements Runnable {
+        @Override
+        public void run() {
+            try {
+                // Start preloading by reading initial chunks of data
+                // This will trigger the source reader in ProxyCache to start downloading
+                byte[] buffer = new byte[8192]; // Small buffer for initial preload
+                long offset = 0;
+                int readBytes = 0;
+                
+                // Read a small amount to get the process started
+                // The ProxyCache will continue downloading in background
+                while (readBytes != -1 && offset < 64 * 1024) { // Preload first 64KB
+                    try {
+                        synchronized (HttpProxyCacheServerClients.this) {
+                            if (proxyCache != null) {
+                                readBytes = proxyCache.read(buffer, offset, buffer.length);
+                                if (readBytes > 0) {
+                                    offset += readBytes;
+                                }
+                            } else {
+                                break;
+                            }
+                        }
+                    } catch (ProxyCacheException e) {
+                        // Preload completed or interrupted - this is normal
+                        break;
+                    }
+                }
+            } catch (Exception e) {
+                // Log error but don't fail - preload is best effort
             }
         }
     }
